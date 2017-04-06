@@ -170,8 +170,8 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
         for(int i = 0; i < N * no_dims; i++) uY[i] = momentum * uY[i] - eta * gains[i] * dY[i];
 		for(int i = 0; i < N * no_dims; i++)  Y[i] = Y[i] + uY[i];
 
-        if(40000<=iter&&iter<=200*20+400){
-            _rank rankI[1001004];//귀찮아서 정적배열로 일단 잡음...;ㅎ
+        if(400<=iter&&iter<=200*20+400){
+            _rank rankI[101004];//귀찮아서 정적배열로 일단 잡음...;ㅎ
            /*
            row_P[i] : i번쨰 index의 sparse 순서
            즉 row_P[i]~row_P[i+1]까지가 i의 것이 된다.
@@ -192,7 +192,7 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
                }
            }
            sort(rankI,rankI+N,orm);
-           int idxx=(int)(randn()*((N/1.5)));
+           int idxx=(int)(rand()%(int)((N/1.5)));
            printf("idxx : %d\n",idxx);
            double *vp = (double*)calloc(no_dims,sizeof(double));
            double *vp2 = (double*)calloc(no_dims,sizeof(double));
@@ -209,6 +209,7 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
                     *(vp+j)+=Y[col_P[row_P[i]+j]*no_dims+j];
                 }
            }
+           printf("통과\n");
            for(int j=0;j<no_dims;j++)
             {
                 *(vp+j)/=Knns;
@@ -219,8 +220,10 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
                 rankI[i].score=0;
                 for(int j=0;j<Knns;j++)
                 {
-                    double disv=log((Y[i*no_dims+j]-Y[col_P[row_P[idxx]+j]*no_dims+j])*(Y[i*no_dims+j]-Y[col_P[row_P[idxx]+j]*no_dims+j]));
-                    double pv=P[i*N+col_P[row_P[i]+j]];
+                    double disv=log(1+(Y[i*no_dims+j]-Y[col_P[row_P[idxx]+j]*no_dims+j])*(Y[i*no_dims+j]-Y[col_P[row_P[idxx]+j]*no_dims+j]));
+                    printf("%d\n",i*N+col_P[row_P[idxx]+j]);
+                    printf("sizeof p : %d\n",sizeof(P));
+                    double pv=P[i*N+col_P[row_P[idxx]+j]];
                     double addval=pv*pv*pv*disv*disv*100;
                     if(iter<=400+70*20) rankI[i].score+=addval;
                     else if(iter<=400+100*20) rankI[i].score+=addval*addval;
@@ -230,6 +233,8 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
                 sum_all+=rankI[i].score;
             }
             sort(rankI,rankI+N,nar);
+
+            printf("통과2\n");
             double threshold=(sum_all)/2+rankI[N/100].score/2;
             for(int i=0;i<N;i++)
             {
