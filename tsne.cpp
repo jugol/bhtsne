@@ -36,13 +36,27 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <algorithm>
 #include "vptree.h"
 #include "sptree.h"
 #include "tsne.h"
 
+#define FAST true
 
 using namespace std;
-
+struct _rank{
+    int index;
+    double score;
+};
+int orm(_rank a,_rank b){
+    if(a.score<b.score)return 1;
+    return 0;
+}
+int nar(_rank a,_rank b){
+    if(a.score>b.score)return 1;
+    return 0;
+}
+int Knns;
 // Perform t-SNE
 void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexity, double theta, int rand_seed,
                bool skip_random_init, int max_iter, int stop_lying_iter, int mom_switch_iter) {
@@ -156,6 +170,92 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
         for(int i = 0; i < N * no_dims; i++) uY[i] = momentum * uY[i] - eta * gains[i] * dY[i];
 		for(int i = 0; i < N * no_dims; i++)  Y[i] = Y[i] + uY[i];
 
+        if(40000<=iter&&iter<=200*20+400){
+            _rank rankI[1001004];//귀찮아서 정적배열로 일단 잡음...;ㅎ
+           /*
+           row_P[i] : i번쨰 index의 sparse 순서
+           즉 row_P[i]~row_P[i+1]까지가 i의 것이 된다.
+           col_P[row_P[i]~row_P[i]+K] : i의 KNN 들.
+           */
+           for(int i=0;i<N;i++)
+           {
+               rankI[i].index=i;
+               rankI[i].score=0;
+               for(int j=0;j<Knns;j++)
+               {
+                    int temp=0;
+                    for(int k=0;k<no_dims;k++)
+                    {
+                        temp+=(Y[i*no_dims+k]-Y[col_P[row_P[i]+j]*no_dims+k])*(Y[i*no_dims+k]-Y[col_P[row_P[i]+j]*no_dims+k]);
+                    }
+                    rankI[i].score+=temp;
+               }
+           }
+           sort(rankI,rankI+N,orm);
+           int idxx=(int)(randn()*((N/1.5)));
+           printf("idxx : %d\n",idxx);
+           double *vp = (double*)calloc(no_dims,sizeof(double));
+           double *vp2 = (double*)calloc(no_dims,sizeof(double));
+           int vcnt=N;
+
+           for(int j=0;j<no_dims;j++)
+            {
+                *(vp+j)=0;
+                *(vp2+j)=0;
+            }
+           for(int i=0;i<Knns;i++){
+                for(int j=0;j<no_dims;j++)
+                {
+                    *(vp+j)+=Y[col_P[row_P[i]+j]*no_dims+j];
+                }
+           }
+           for(int j=0;j<no_dims;j++)
+            {
+                *(vp+j)/=Knns;
+            }
+            double sum_all=0;
+            for(int i=0;i<N;i++){
+                rankI[i].index=i;
+                rankI[i].score=0;
+                for(int j=0;j<Knns;j++)
+                {
+                    double disv=log((Y[i*no_dims+j]-Y[col_P[row_P[idxx]+j]*no_dims+j])*(Y[i*no_dims+j]-Y[col_P[row_P[idxx]+j]*no_dims+j]));
+                    double pv=P[i*N+col_P[row_P[i]+j]];
+                    double addval=pv*pv*pv*disv*disv*100;
+                    if(iter<=400+70*20) rankI[i].score+=addval;
+                    else if(iter<=400+100*20) rankI[i].score+=addval*addval;
+                    else if(iter<=400+150*20) rankI[i].score+=addval*addval*addval;
+                    else if(iter<=400+200*20) rankI[i].score+=addval*addval*addval*addval;
+                }
+                sum_all+=rankI[i].score;
+            }
+            sort(rankI,rankI+N,nar);
+            double threshold=(sum_all)/2+rankI[N/100].score/2;
+            for(int i=0;i<N;i++)
+            {
+                if(rankI[i].score>threshold){
+                    for(int j=0;j<no_dims;j++){
+                        vp2[j]+=Y[rankI[i].index*no_dims+j];
+                        uY[rankI[i].index*no_dims+j]+=(vp[j]-Y[rankI[i].index*no_dims+j])*0.03;
+                    }
+                }
+                else {
+                    vcnt=i;
+                    break;
+                }
+            }
+            for(int i=0;i<no_dims;i++)
+            {
+                vp2[i]/=vcnt;
+            }
+            for(int i=0;i<Knns;i++)
+            {
+                for(int j=0;j<no_dims;j++)
+                {
+                       uY[col_P[row_P[idxx]+j]*no_dims+j]+=(vp2[j]-Y[col_P[row_P[idxx]+j]*no_dims+j])*(0.03*vcnt/Knns);
+                }
+            }
+        }
         // Make solution zero-mean
 		zeroMean(Y, N, no_dims);
 
@@ -165,6 +265,8 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
             else      { for(int i = 0; i < row_P[N]; i++) val_P[i] /= 12.0; }
         }
         if(iter == mom_switch_iter) momentum = final_momentum;
+        if(iter == 400) momentum=0.9;
+        if(iter == 20 * 200 + 400) momentum=final_momentum;
 
         // Print out progress
         if (iter > 0 && (iter % 50 == 0 || iter == max_iter - 1)) {
@@ -414,6 +516,7 @@ void TSNE::computeGaussianPerplexity(double* X, int N, int D, double* P, double 
 // Compute input similarities with a fixed perplexity using ball trees (this function allocates memory another function should free)
 void TSNE::computeGaussianPerplexity(double* X, int N, int D, unsigned int** _row_P, unsigned int** _col_P, double** _val_P, double perplexity, int K) {
 
+    Knns=K;
     if(perplexity > K) printf("Perplexity should be lower than K!\n");
 
     // Allocate the memory we need

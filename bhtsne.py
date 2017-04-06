@@ -148,7 +148,7 @@ def bh_tsne(workdir, verbose=False):
         bh_tsne_p = Popen((abspath(BH_TSNE_BIN_PATH), ), cwd=workdir,
                 # bh_tsne is very noisy on stdout, tell it to use stderr
                 #   if it is to print any output
-                stdout=stderr if verbose else dev_null)
+              )
         bh_tsne_p.wait()
         assert not bh_tsne_p.returncode, ('ERROR: Call to bh_tsne exited '
                 'with a non-zero return code exit status, please ' +
