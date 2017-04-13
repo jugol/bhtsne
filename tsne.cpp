@@ -43,11 +43,17 @@
 
 #define FAST true
 
+#include <map>
 using namespace std;
+
+
+map<int, map<int,double> > Px;
+
 struct _rank{
     int index;
     double score;
 };
+
 int orm(_rank a,_rank b){
     if(a.score<b.score)return 1;
     return 0;
@@ -155,27 +161,39 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
     if(exact) printf("Input similarities computed in %4.2f seconds!\nLearning embedding...\n", (float) (end - start) / CLOCKS_PER_SEC);
     else printf("Input similarities computed in %4.2f seconds (sparsity = %f)!\nLearning embedding...\n", (float) (end - start) / CLOCKS_PER_SEC, (double) row_P[N] / ((double) N * (double) N));
     start = clock();
-
+    if(exact){
+        //개발 안됨.ㅎ
+    }else{
+        for(int i=0;i<N;i++) {
+            for(int j=row_P[i];j<row_P[i+1];j++){
+                Px[i][col_P[j]]+=val_P[j]/2;
+                Px[col_P[j]][i]+=val_P[j]/2;
+            }
+        }
+    }
+    int lab_size = 20;
+    struct  _rank *rankI = (struct _rank*)malloc((N+1)*sizeof(struct _rank));
+    double *vp = (double*)calloc(no_dims,sizeof(double));
+    double *vp2 = (double*)calloc(no_dims,sizeof(double));
 	for(int iter = 0; iter < max_iter; iter++) {
 
         // Compute (approximate) gradient
         if(exact) computeExactGradient(P, Y, N, no_dims, dY);
         else computeGradient(P, row_P, col_P, val_P, Y, N, no_dims, dY, theta);
-
         // Update gains
         for(int i = 0; i < N * no_dims; i++) gains[i] = (sign(dY[i]) != sign(uY[i])) ? (gains[i] + .2) : (gains[i] * .8);
         for(int i = 0; i < N * no_dims; i++) if(gains[i] < .01) gains[i] = .01;
-
+        
         // Perform gradient update (with momentum and gains)
         for(int i = 0; i < N * no_dims; i++) uY[i] = momentum * uY[i] - eta * gains[i] * dY[i];
 		for(int i = 0; i < N * no_dims; i++)  Y[i] = Y[i] + uY[i];
-
-        if(400<=iter&&iter<=200*20+400){
-            _rank rankI[101004];//귀찮아서 정적배열로 일단 잡음...;ㅎ
+        
+        if(400<=iter&&iter<=200*lab_size+400){
            /*
            row_P[i] : i번쨰 index의 sparse 순서
            즉 row_P[i]~row_P[i+1]까지가 i의 것이 된다.
            col_P[row_P[i]~row_P[i]+K] : i의 KNN 들.
+           그리고 아마 val_P의 그 위치가 P값인듯!
            */
            for(int i=0;i<N;i++)
            {
@@ -191,13 +209,11 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
                     rankI[i].score+=temp;
                }
            }
-           sort(rankI,rankI+N,orm);
-           int idxx=(int)(rand()%(int)((N/1.5)));
-           printf("idxx : %d\n",idxx);
-           double *vp = (double*)calloc(no_dims,sizeof(double));
-           double *vp2 = (double*)calloc(no_dims,sizeof(double));
-           int vcnt=N;
 
+           sort(rankI,rankI+N,orm);
+           int idxx=(int)(rand()%(int)((N/1.2)));
+           int vcnt=N;
+           double param=0.03;
            for(int j=0;j<no_dims;j++)
             {
                 *(vp+j)=0;
@@ -209,7 +225,6 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
                     *(vp+j)+=Y[col_P[row_P[i]+j]*no_dims+j];
                 }
            }
-           printf("통과\n");
            for(int j=0;j<no_dims;j++)
             {
                 *(vp+j)/=Knns;
@@ -220,50 +235,51 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
                 rankI[i].score=0;
                 for(int j=0;j<Knns;j++)
                 {
-                    double disv=log(1+(Y[i*no_dims+j]-Y[col_P[row_P[idxx]+j]*no_dims+j])*(Y[i*no_dims+j]-Y[col_P[row_P[idxx]+j]*no_dims+j]));
-                    printf("%d\n",i*N+col_P[row_P[idxx]+j]);
-                    printf("sizeof p : %d\n",sizeof(P));
-                    double pv=P[i*N+col_P[row_P[idxx]+j]];
+                    double sq=0;
+                    for(int k=0;k<no_dims;k++){
+                        sq+=(Y[i*no_dims+k]-Y[col_P[row_P[idxx]+j]*no_dims+k])*(Y[i*no_dims+k]-Y[col_P[row_P[idxx]+j]*no_dims+k]);
+                    }
+                    double disv=log(1+sq);
+                    double pv=Px[i].find(col_P[row_P[idxx]+j])==Px[i].end()?0:Px[i][col_P[row_P[idxx]+j]];//Px[i][col_P[row_P[idxx]+j]];
                     double addval=pv*pv*pv*disv*disv*100;
-                    if(iter<=400+70*20) rankI[i].score+=addval;
-                    else if(iter<=400+100*20) rankI[i].score+=addval*addval;
-                    else if(iter<=400+150*20) rankI[i].score+=addval*addval*addval;
-                    else if(iter<=400+200*20) rankI[i].score+=addval*addval*addval*addval;
+                    if(iter<=400+70*lab_size) rankI[i].score+=addval;
+                    else if(iter<=400+100*lab_size) rankI[i].score+=addval*addval;
+                    else if(iter<=400+150*lab_size) rankI[i].score+=addval*addval*addval;
+                    else if(iter<=400+200*lab_size) rankI[i].score+=addval*addval*addval*addval;
                 }
                 sum_all+=rankI[i].score;
             }
+            sum_all/=N;
             sort(rankI,rankI+N,nar);
-
-            printf("통과2\n");
             double threshold=(sum_all)/2+rankI[N/100].score/2;
             for(int i=0;i<N;i++)
             {
                 if(rankI[i].score>threshold){
                     for(int j=0;j<no_dims;j++){
-                        vp2[j]+=Y[rankI[i].index*no_dims+j];
-                        uY[rankI[i].index*no_dims+j]+=(vp[j]-Y[rankI[i].index*no_dims+j])*0.03;
+                        *(vp2+j)+=Y[rankI[i].index*no_dims+j];
+                        uY[rankI[i].index*no_dims+j]+=(*(vp+j)-Y[rankI[i].index*no_dims+j])*param;
                     }
                 }
                 else {
                     vcnt=i;
+                    if(i==0)printf("뺴애애애애애애애액\n");
                     break;
                 }
             }
             for(int i=0;i<no_dims;i++)
             {
-                vp2[i]/=vcnt;
+                *(vp2+i)/=vcnt;
             }
             for(int i=0;i<Knns;i++)
             {
                 for(int j=0;j<no_dims;j++)
                 {
-                       uY[col_P[row_P[idxx]+j]*no_dims+j]+=(vp2[j]-Y[col_P[row_P[idxx]+j]*no_dims+j])*(0.03*vcnt/Knns);
+                       uY[col_P[row_P[idxx]+i]*no_dims+j]+=(*(vp2+j)-Y[col_P[row_P[idxx]+i]*no_dims+j])*(param*vcnt/Knns);
                 }
             }
-        }
+        }//변형끝
         // Make solution zero-mean
 		zeroMean(Y, N, no_dims);
-
         // Stop lying about the P-values after a while, and switch momentum
         if(iter == stop_lying_iter) {
             if(exact) { for(int i = 0; i < N * N; i++)        P[i] /= 12.0; }
@@ -271,8 +287,9 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
         }
         if(iter == mom_switch_iter) momentum = final_momentum;
         if(iter == 400) momentum=0.9;
-        if(iter == 20 * 200 + 400) momentum=final_momentum;
+        if(iter == lab_size * 200 + 400) momentum=final_momentum;
 
+        
         // Print out progress
         if (iter > 0 && (iter % 50 == 0 || iter == max_iter - 1)) {
             end = clock();
@@ -287,7 +304,11 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
             }
 			start = clock();
         }
+
     }
+    free(rankI);
+    free(vp);
+    free(vp2);
     end = clock(); total_time += (float) (end - start) / CLOCKS_PER_SEC;
 
     // Clean up memory
@@ -318,7 +339,6 @@ void TSNE::computeGradient(double* P, unsigned int* inp_row_P, unsigned int* inp
     if(pos_f == NULL || neg_f == NULL) { printf("Memory allocation failed!\n"); exit(1); }
     tree->computeEdgeForces(inp_row_P, inp_col_P, inp_val_P, N, pos_f);
     for(int n = 0; n < N; n++) tree->computeNonEdgeForces(n, theta, neg_f + n * D, &sum_Q);
-
     // Compute final t-SNE gradient
     for(int i = 0; i < N * D; i++) {
         dC[i] = pos_f[i] - (neg_f[i] / sum_Q);

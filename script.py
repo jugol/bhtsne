@@ -2,7 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 data = np.loadtxt('out')
 
-label = np.loadtxt('mnist2500_labels.txt')
+label = np.loadtxt('mnist_label.txt')
 
 xdata = data[:,0]
 ydata = data[:,1]

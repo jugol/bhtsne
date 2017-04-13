@@ -8,3 +8,6 @@ bh_tsne
 # ignore data files
 *.txt
 *.tsv
+
+MNIST_data/
+data/

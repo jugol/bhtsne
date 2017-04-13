@@ -1,4 +1,9 @@
 컴파일
 g++ sptree.cpp tsne.cpp tsne_main.cpp -o bh_tsne -O2
 
-python bhtsne.py -i mnist2500_X.txt -o out
+python3 bhtsne.py -i mnist2500_X.txt -o out --max_iter 10000 --randseed 30 && python3 script.py
+
+python3 bhtsne.py -i mnist_vec784D.txt -o out --max_iter 10000 --randseed 30 && python3 script.py
+
+python3 bhtsne.py -i mnist_vec784D.txt -o out --max_iter 10000 --randseed 30 --perplexity 250 && python3 script.py
+
